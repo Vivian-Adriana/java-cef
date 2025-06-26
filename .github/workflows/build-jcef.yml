@@ -161,8 +161,7 @@ jobs:
           brew install coreutils
           brew install s3cmd
           
-          # Navigate to java-cef directory and create build directory
-          cd common/java-cef
+          # Create build directory
           mkdir jcef_build && cd jcef_build
           
           # Configure with CMake
@@ -181,8 +180,8 @@ jobs:
         with:
           name: macos-amd64
           path: |
-            common/java-cef/jcef_build/macos_amd64.tar.gz
-            common/java-cef/jcef_build/macos_amd64.tar.gz.sha256
+            jcef_build/macos_amd64.tar.gz
+            jcef_build/macos_amd64.tar.gz.sha256
       
       - name: Copy s3cfg
         if: ${{ env.S3_CFG != '' }}
@@ -191,8 +190,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          s3cmd put -P common/java-cef/jcef_build/macos_amd64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz
-          s3cmd put -P common/java-cef/jcef_build/macos_amd64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz.sha256
+          s3cmd put -P jcef_build/macos_amd64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz
+          s3cmd put -P jcef_build/macos_amd64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
@@ -220,8 +219,7 @@ jobs:
           brew install coreutils
           brew install s3cmd
           
-          # Navigate to java-cef directory and create build directory
-          cd common/java-cef
+          # Create build directory
           mkdir jcef_build && cd jcef_build
           
           # Configure with CMake
@@ -240,8 +238,8 @@ jobs:
         with:
           name: macos-arm64
           path: |
-            common/java-cef/jcef_build/macos_arm64.tar.gz
-            common/java-cef/jcef_build/macos_arm64.tar.gz.sha256
+            jcef_build/macos_arm64.tar.gz
+            jcef_build/macos_arm64.tar.gz.sha256
       
       - name: Copy s3cfg
         if: ${{ env.S3_CFG != '' }}
@@ -250,8 +248,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          s3cmd put -P common/java-cef/jcef_build/macos_arm64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz
-          s3cmd put -P common/java-cef/jcef_build/macos_arm64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz.sha256
+          s3cmd put -P jcef_build/macos_arm64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz
+          s3cmd put -P jcef_build/macos_arm64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
