@@ -62,14 +62,16 @@ jobs:
             jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256
       
       - name: Copy s3cfg
-        if: ${{ secrets.S3_CFG }}
+        if: ${{ env.S3_CFG != '' }}
         run: echo "${{ secrets.S3_CFG }}" > ~/.s3cfg
       
       - name: Upload to S3
-        if: ${{ secrets.S3_CFG && github.ref == 'refs/heads/master' }}
+        if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
           s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz
           s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz.sha256
+        env:
+          S3_CFG: ${{ secrets.S3_CFG }}
 
   java-cef-windows:
     runs-on: windows-2022
@@ -124,14 +126,16 @@ jobs:
             jcef_build/windows_${{ matrix.platform }}.tar.gz.sha256
       
       - name: Copy s3cfg
-        if: ${{ secrets.S3_CFG }}
+        if: ${{ env.S3_CFG != '' }}
         run: echo "${{ secrets.S3_CFG }}" > "$HOME\AppData\Roaming\s3cmd.ini"
       
       - name: Upload to S3
-        if: ${{ secrets.S3_CFG && github.ref == 'refs/heads/master' }}
+        if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
           python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz
           python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz.sha256
+        env:
+          S3_CFG: ${{ secrets.S3_CFG }}
 
   java-cef-macos:
     runs-on: macos-12
@@ -184,14 +188,16 @@ jobs:
             jcef_build/macos_${{ matrix.platform }}.tar.gz.sha256
       
       - name: Copy s3cfg
-        if: ${{ secrets.S3_CFG }}
+        if: ${{ env.S3_CFG != '' }}
         run: echo "${{ secrets.S3_CFG }}" > ~/.s3cfg
       
       - name: Upload to S3
-        if: ${{ secrets.S3_CFG && github.ref == 'refs/heads/master' }}
+        if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
           s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_${{ matrix.platform }}.tar.gz
           s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_${{ matrix.platform }}.tar.gz.sha256
+        env:
+          S3_CFG: ${{ secrets.S3_CFG }}
 
   create-release:
     needs: [java-cef-linux, java-cef-windows, java-cef-macos]
