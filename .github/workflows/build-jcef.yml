@@ -10,10 +10,47 @@ on:
       - master
       - main
   workflow_dispatch:
+      - name: Build
+        run: |
+          # Install Ninja build system
+          choco install ninja -y
+          
+          mkdir jcef_build && cd jcef_build
+          
+          # Configure with CMake - more explicit for Windows
+          cmake -G "Ninja" `
+                -DPROJECT_ARCH=${{ matrix.platform }} `
+                -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} `
+                -DCEF_USE_SANDBOX=OFF `
+                ..
+          
+          # Build with limited parallelism
+          ninja -j2
+          
+          # Verify build output
+          if (!(Test-Path "native\Release")) {
+            Write-Host "Build failed: native\Release directory not found"
+            Get-ChildItem native\ -ErrorAction SilentlyContinue | Format-Table
+            exit 1
+          }
+          
+          cd native
+          ren Release windows_${{ matrix.platform }}
+          cd ..
+          move native\windows_${{ matrix.platform }} windows_${{ matrix.platform }}
+          tar -czf windows_${{ matrix.platform }}.tar.gz windows_${{ matrix.platform }}
+          Get-FileHash -Algorithm SHA256 -Path "windows_${{ matrix.platform }}.tar.gz" | Select-Object Hash | Out-File "windows_${{ matrix.platform }}.tar.gz.sha256" -Encoding ASCII
+    # Run weekly to catch any dependency updates
+    - cron: '0 0 * * 0'
+
+env:
+  JAVA_VERSION: '8'
+  CMAKE_BUILD_TYPE: 'Release'
 
 jobs:
   java-cef-linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     strategy:
       matrix:
         platform: [amd64, arm64]
@@ -30,26 +67,56 @@ jobs:
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '8'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
+      
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-${{ matrix.platform }}-deps-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-deps-
       
       - name: Install dependencies and build
         run: |
           sudo apt update
           sudo apt install build-essential g++ cmake ninja-build python3 libgtk2.0-dev s3cmd -y
           
+          # Install additional dependencies for CEF
+          sudo apt install libx11-dev libxrandr-dev libxi-dev libxss-dev libgconf-2-4 \
+                          libxdamage-dev libxcomposite-dev libasound2-dev libatk1.0-dev \
+                          libgtk-3-dev libdrm-dev libxss-dev libgconf-2-4 -y
+          
           # Create build directory
           mkdir jcef_build && cd jcef_build
           
-          # Configure with CMake
-          cmake -G "Ninja" -DPROJECT_ARCH=${{ matrix.platform }} -DCMAKE_BUILD_TYPE=Release ..
+          # Configure with CMake - more explicit configuration
+          cmake -G "Ninja" \
+                -DPROJECT_ARCH=${{ matrix.platform }} \
+                -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
+                -DCEF_USE_SANDBOX=OFF \
+                ..
           
-          # Build with Ninja
-          ninja -j4
+          # Build with Ninja (limit parallel jobs to prevent OOM)
+          ninja -j2
+          
+          # Verify build output exists
+          if [ ! -d "native/Release" ]; then
+            echo "Build failed: native/Release directory not found"
+            exit 1
+          fi
           
           # Package the build
           mv native/Release linux_${{ matrix.platform }}
-          strip linux_${{ matrix.platform }}/libcef.so
+          
+          # Strip binaries to reduce size
+          find linux_${{ matrix.platform }} -name "*.so" -exec strip {} \;
+          
+          # Create archive
           tar -czf linux_${{ matrix.platform }}.tar.gz linux_${{ matrix.platform }}
           sha256sum linux_${{ matrix.platform }}.tar.gz > linux_${{ matrix.platform }}.tar.gz.sha256
       
@@ -75,6 +142,7 @@ jobs:
 
   java-cef-windows:
     runs-on: windows-2022
+    timeout-minutes: 150
     strategy:
       matrix:
         platform: [amd64, arm64]
@@ -91,8 +159,19 @@ jobs:
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '8'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
+      
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\pip\Cache
+            ~\.gradle\caches
+            ~\.gradle\wrapper
+          key: ${{ runner.os }}-${{ matrix.platform }}-deps-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-deps-
       
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -137,11 +216,9 @@ jobs:
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
-  java-cef-macos:
-    runs-on: macos-12
-    strategy:
-      matrix:
-        platform: [amd64, arm64]
+  java-cef-macos-amd64:
+    runs-on: macos-13
+    timeout-minutes: 150
     steps:
       - name: Upload mask
         run: echo "::add-mask::${{ secrets.UPLOAD_URL }}"
@@ -155,37 +232,61 @@ jobs:
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '8'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
+      
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-amd64-deps-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-amd64-deps-
       
       - name: Install dependencies and build
         run: |
-          brew install ninja
-          brew install coreutils
-          brew install s3cmd
-          sudo xcode-select --switch /Applications/Xcode_13.1.app
+          # Update Homebrew and install dependencies
+          brew update
+          brew install ninja coreutils s3cmd cmake
+          
+          # Set Xcode version (use available version, don't force specific one)
+          sudo xcode-select --print-path
           
           # Create build directory
           mkdir jcef_build && cd jcef_build
           
-          # Configure with CMake
-          cmake -G "Ninja" -DPROJECT_ARCH=${{ matrix.platform }} -DCMAKE_BUILD_TYPE=Release ..
+          # Configure with CMake - more explicit for macOS
+          cmake -G "Ninja" \
+                -DPROJECT_ARCH=amd64 \
+                -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
+                -DCEF_USE_SANDBOX=OFF \
+                ..
           
-          # Build with Ninja
-          ninja -j4
+          # Build with limited parallelism for macOS runners
+          ninja -j2
+          
+          # Verify build output
+          if [ ! -d "native/Release" ]; then
+            echo "Build failed: native/Release directory not found"
+            ls -la native/ || echo "native directory doesn't exist"
+            exit 1
+          fi
           
           # Package the build
-          mv native/Release macos_${{ matrix.platform }}
-          tar -czf macos_${{ matrix.platform }}.tar.gz macos_${{ matrix.platform }}
-          shasum -a 256 macos_${{ matrix.platform }}.tar.gz > macos_${{ matrix.platform }}.tar.gz.sha256
+          mv native/Release macos_amd64
+          tar -czf macos_amd64.tar.gz macos_amd64
+          shasum -a 256 macos_amd64.tar.gz > macos_amd64.tar.gz.sha256
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.platform }}
+          name: macos-amd64
           path: |
-            jcef_build/macos_${{ matrix.platform }}.tar.gz
-            jcef_build/macos_${{ matrix.platform }}.tar.gz.sha256
+            jcef_build/macos_amd64.tar.gz
+            jcef_build/macos_amd64.tar.gz.sha256
       
       - name: Copy s3cfg
         if: ${{ env.S3_CFG != '' }}
@@ -194,13 +295,97 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_${{ matrix.platform }}.tar.gz
-          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_${{ matrix.platform }}.tar.gz.sha256
+          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_amd64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz
+          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_amd64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz.sha256
+        env:
+          S3_CFG: ${{ secrets.S3_CFG }}
+
+  java-cef-macos-arm64:
+    runs-on: macos-14
+    timeout-minutes: 150
+    steps:
+      - name: Upload mask
+        run: echo "::add-mask::${{ secrets.UPLOAD_URL }}"
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+      
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-arm64-deps-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-arm64-deps-
+      
+      - name: Install dependencies and build
+        run: |
+          # Update Homebrew and install dependencies
+          brew update
+          brew install ninja coreutils s3cmd cmake
+          
+          # Set Xcode version (use available version, don't force specific one)
+          sudo xcode-select --print-path
+          
+          # Create build directory
+          mkdir jcef_build && cd jcef_build
+          
+          # Configure with CMake - more explicit for macOS
+          cmake -G "Ninja" \
+                -DPROJECT_ARCH=arm64 \
+                -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
+                -DCEF_USE_SANDBOX=OFF \
+                ..
+          
+          # Build with limited parallelism for macOS runners
+          ninja -j2
+          
+          # Verify build output
+          if [ ! -d "native/Release" ]; then
+            echo "Build failed: native/Release directory not found"
+            ls -la native/ || echo "native directory doesn't exist"
+            exit 1
+          fi
+          
+          # Package the build
+          mv native/Release macos_arm64
+          tar -czf macos_arm64.tar.gz macos_arm64
+          shasum -a 256 macos_arm64.tar.gz > macos_arm64.tar.gz.sha256
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: |
+            jcef_build/macos_arm64.tar.gz
+            jcef_build/macos_arm64.tar.gz.sha256
+      
+      - name: Copy s3cfg
+        if: ${{ env.S3_CFG != '' }}
+        run: echo "${{ secrets.S3_CFG }}" > ~/.s3cfg
+      
+      - name: Upload to S3
+        if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
+        run: |
+          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_arm64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz
+          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_arm64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
   create-release:
-    needs: [java-cef-linux, java-cef-windows, java-cef-macos]
+    needs: [java-cef-linux, java-cef-windows, java-cef-macos-amd64, java-cef-macos-arm64]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
