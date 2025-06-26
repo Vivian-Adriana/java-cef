@@ -10,36 +10,7 @@ on:
       - master
       - main
   workflow_dispatch:
-      - name: Build
-        run: |
-          # Install Ninja build system
-          choco install ninja -y
-          
-          mkdir jcef_build && cd jcef_build
-          
-          # Configure with CMake - more explicit for Windows
-          cmake -G "Ninja" `
-                -DPROJECT_ARCH=${{ matrix.platform }} `
-                -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} `
-                -DCEF_USE_SANDBOX=OFF `
-                ..
-          
-          # Build with limited parallelism
-          ninja -j2
-          
-          # Verify build output
-          if (!(Test-Path "native\Release")) {
-            Write-Host "Build failed: native\Release directory not found"
-            Get-ChildItem native\ -ErrorAction SilentlyContinue | Format-Table
-            exit 1
-          }
-          
-          cd native
-          ren Release windows_${{ matrix.platform }}
-          cd ..
-          move native\windows_${{ matrix.platform }} windows_${{ matrix.platform }}
-          tar -czf windows_${{ matrix.platform }}.tar.gz windows_${{ matrix.platform }}
-          Get-FileHash -Algorithm SHA256 -Path "windows_${{ matrix.platform }}.tar.gz" | Select-Object Hash | Out-File "windows_${{ matrix.platform }}.tar.gz.sha256" -Encoding ASCII
+  schedule:
     # Run weekly to catch any dependency updates
     - cron: '0 0 * * 0'
 
@@ -91,7 +62,8 @@ jobs:
                           libxdamage-dev libxcomposite-dev libasound2-dev libatk1.0-dev \
                           libgtk-3-dev libdrm-dev libxss-dev libgconf-2-4 -y
           
-          # Create build directory
+          # Navigate to java-cef directory and create build directory
+          cd common/java-cef
           mkdir jcef_build && cd jcef_build
           
           # Configure with CMake - more explicit configuration
@@ -125,8 +97,8 @@ jobs:
         with:
           name: linux-${{ matrix.platform }}
           path: |
-            jcef_build/linux_${{ matrix.platform }}.tar.gz
-            jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256
+            common/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz
+            common/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256
       
       - name: Copy s3cfg
         if: ${{ env.S3_CFG != '' }}
@@ -135,8 +107,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz
-          s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz.sha256
+          s3cmd put -P common/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz
+          s3cmd put -P common/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
@@ -186,6 +158,7 @@ jobs:
       
       - name: Build
         run: |
+          cd common/java-cef
           mkdir jcef_build && cd jcef_build
           cmake -G "Ninja" -DPROJECT_ARCH=${{ matrix.platform }} -DCMAKE_BUILD_TYPE=Release ..
           ninja -j4
@@ -201,8 +174,8 @@ jobs:
         with:
           name: windows-${{ matrix.platform }}
           path: |
-            jcef_build/windows_${{ matrix.platform }}.tar.gz
-            jcef_build/windows_${{ matrix.platform }}.tar.gz.sha256
+            common/java-cef/jcef_build/windows_${{ matrix.platform }}.tar.gz
+            common/java-cef/jcef_build/windows_${{ matrix.platform }}.tar.gz.sha256
       
       - name: Copy s3cfg
         if: ${{ env.S3_CFG != '' }}
@@ -211,8 +184,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz
-          python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz.sha256
+          python D:\s3cmd\s3cmd-master\s3cmd put -P common\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz
+          python D:\s3cmd\s3cmd-master\s3cmd put -P common\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
@@ -255,7 +228,8 @@ jobs:
           # Set Xcode version (use available version, don't force specific one)
           sudo xcode-select --print-path
           
-          # Create build directory
+          # Navigate to java-cef directory and create build directory
+          cd common/java-cef
           mkdir jcef_build && cd jcef_build
           
           # Configure with CMake - more explicit for macOS
@@ -285,8 +259,8 @@ jobs:
         with:
           name: macos-amd64
           path: |
-            jcef_build/macos_amd64.tar.gz
-            jcef_build/macos_amd64.tar.gz.sha256
+            common/java-cef/jcef_build/macos_amd64.tar.gz
+            common/java-cef/jcef_build/macos_amd64.tar.gz.sha256
       
       - name: Copy s3cfg
         if: ${{ env.S3_CFG != '' }}
@@ -295,8 +269,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_amd64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz
-          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_amd64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz.sha256
+          s3cmd put -P common/java-cef/jcef_build/macos_amd64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz
+          s3cmd put -P common/java-cef/jcef_build/macos_amd64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_amd64.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
@@ -339,7 +313,8 @@ jobs:
           # Set Xcode version (use available version, don't force specific one)
           sudo xcode-select --print-path
           
-          # Create build directory
+          # Navigate to java-cef directory and create build directory
+          cd common/java-cef
           mkdir jcef_build && cd jcef_build
           
           # Configure with CMake - more explicit for macOS
@@ -369,8 +344,8 @@ jobs:
         with:
           name: macos-arm64
           path: |
-            jcef_build/macos_arm64.tar.gz
-            jcef_build/macos_arm64.tar.gz.sha256
+            common/java-cef/jcef_build/macos_arm64.tar.gz
+            common/java-cef/jcef_build/macos_arm64.tar.gz.sha256
       
       - name: Copy s3cfg
         if: ${{ env.S3_CFG != '' }}
@@ -379,8 +354,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_arm64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz
-          s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_arm64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz.sha256
+          s3cmd put -P common/java-cef/jcef_build/macos_arm64.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz
+          s3cmd put -P common/java-cef/jcef_build/macos_arm64.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_arm64.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
