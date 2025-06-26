@@ -11,6 +11,7 @@ on:
       - main
   workflow_dispatch:
 
+
 jobs:
   java-cef-linux:
     runs-on: ubuntu-latest
@@ -149,6 +150,11 @@ jobs:
           submodules: recursive
           fetch-depth: 0
       
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
@@ -206,6 +212,11 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
       
       - name: Setup JDK
         uses: actions/setup-java@v4
