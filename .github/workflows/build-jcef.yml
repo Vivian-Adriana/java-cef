@@ -68,8 +68,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz
-          s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz.sha256
+          s3cmd put -P jcef_build/linux_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz
+          s3cmd put -P jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
@@ -132,8 +132,8 @@ jobs:
       - name: Upload to S3
         if: ${{ env.S3_CFG != '' && github.ref == 'refs/heads/master' }}
         run: |
-          python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz
-          python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz.sha256
+          python D:\s3cmd\s3cmd-master\s3cmd put -P jcef_build\windows_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz
+          python D:\s3cmd\s3cmd-master\s3cmd put -P jcef_build\windows_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz.sha256
         env:
           S3_CFG: ${{ secrets.S3_CFG }}
 
@@ -160,9 +160,8 @@ jobs:
           brew install ninja
           brew install coreutils
           brew install s3cmd
-          sudo xcode-select --switch /Applications/Xcode_13.1.app
           
-          # Navigate to java-cef directory and create build directory
+          # Create build directory
           mkdir jcef_build && cd jcef_build
           
           # Configure with CMake
@@ -220,8 +219,7 @@ jobs:
           brew install coreutils
           brew install s3cmd
           
-          # Navigate to java-cef directory and create build directory
-          cd common/java-cef
+          # Create build directory
           mkdir jcef_build && cd jcef_build
           
           # Configure with CMake
