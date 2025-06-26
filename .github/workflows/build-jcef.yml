@@ -8,7 +8,7 @@ on:
 
 jobs:
   java-cef-linux:
-    runs-on: [ubuntu-20.04]
+    runs-on: [ubuntu-latest]
     strategy:
       matrix:
         platform: [amd64, arm64]
