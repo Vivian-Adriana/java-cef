@@ -4,60 +4,105 @@ on:
   push:
     branches:
       - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
   workflow_dispatch:
 
 jobs:
   java-cef-linux:
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         platform: [amd64, arm64]
     steps:
       - name: Upload mask
         run: echo "::add-mask::${{ secrets.UPLOAD_URL }}"
-      - uses: actions/checkout@v4
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
-      - name: Install deps and build
+      
+      - name: Install dependencies and build
         run: |
           sudo apt update
           sudo apt install build-essential g++ cmake ninja-build python3 libgtk2.0-dev s3cmd -y
+          
+          # Create build directory
           mkdir jcef_build && cd jcef_build
+          
+          # Configure with CMake
           cmake -G "Ninja" -DPROJECT_ARCH=${{ matrix.platform }} -DCMAKE_BUILD_TYPE=Release ..
+          
+          # Build with Ninja
           ninja -j4
+          
+          # Package the build
           mv native/Release linux_${{ matrix.platform }}
           strip linux_${{ matrix.platform }}/libcef.so
           tar -czf linux_${{ matrix.platform }}.tar.gz linux_${{ matrix.platform }}
           sha256sum linux_${{ matrix.platform }}.tar.gz > linux_${{ matrix.platform }}.tar.gz.sha256
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.platform }}
+          path: |
+            jcef_build/linux_${{ matrix.platform }}.tar.gz
+            jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256
+      
       - name: Copy s3cfg
+        if: ${{ secrets.S3_CFG }}
         run: echo "${{ secrets.S3_CFG }}" > ~/.s3cfg
-      - name: Upload java-cef build
+      
+      - name: Upload to S3
+        if: ${{ secrets.S3_CFG && github.ref == 'refs/heads/master' }}
         run: |
           s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz
           s3cmd put -P /home/runner/work/java-cef/java-cef/jcef_build/linux_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/linux_${{ matrix.platform }}.tar.gz.sha256
+
   java-cef-windows:
-    runs-on: [windows-2022]
+    runs-on: windows-2022
     strategy:
       matrix:
         platform: [amd64, arm64]
     steps:
       - name: Upload mask
         run: echo "::add-mask::${{ secrets.UPLOAD_URL }}"
-      - uses: actions/checkout@v4
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Install s3cmd
+      
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.platform == 'amd64' && 'x64' || 'arm64' }}
+      
+      - name: Install dependencies
         run: |
           pip install python-dateutil
           Invoke-WebRequest -Uri "https://github.com/s3tools/s3cmd/archive/master.zip" -OutFile "D:\s3cmd.zip"
           Expand-Archive -Path "D:\s3cmd.zip" -DestinationPath "D:\s3cmd"
+      
       - name: Build
         run: |
           mkdir jcef_build && cd jcef_build
@@ -68,41 +113,115 @@ jobs:
           cd ..
           move native/windows_${{ matrix.platform }} windows_${{ matrix.platform }}
           tar -czf windows_${{ matrix.platform }}.tar.gz windows_${{ matrix.platform }}
-          Get-FileHash -Algorithm SHA256 -Path "windows_${{ matrix.platform }}.tar.gz" | Out-File "windows_${{ matrix.platform }}.tar.gz.sha256"
+          Get-FileHash -Algorithm SHA256 -Path "windows_${{ matrix.platform }}.tar.gz" | Select-Object Hash | Out-File "windows_${{ matrix.platform }}.tar.gz.sha256" -Encoding ASCII
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.platform }}
+          path: |
+            jcef_build/windows_${{ matrix.platform }}.tar.gz
+            jcef_build/windows_${{ matrix.platform }}.tar.gz.sha256
+      
       - name: Copy s3cfg
+        if: ${{ secrets.S3_CFG }}
         run: echo "${{ secrets.S3_CFG }}" > "$HOME\AppData\Roaming\s3cmd.ini"
-      - name: Upload java-cef build
+      
+      - name: Upload to S3
+        if: ${{ secrets.S3_CFG && github.ref == 'refs/heads/master' }}
         run: |
           python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz
           python D:\s3cmd\s3cmd-master\s3cmd put -P D:\a\java-cef\java-cef\jcef_build\windows_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/windows_${{ matrix.platform }}.tar.gz.sha256
+
   java-cef-macos:
-    runs-on: [macos-12]
+    runs-on: macos-12
     strategy:
       matrix:
         platform: [amd64, arm64]
     steps:
       - name: Upload mask
         run: echo "::add-mask::${{ secrets.UPLOAD_URL }}"
-      - uses: actions/checkout@v4
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
-      - run: |
+      
+      - name: Install dependencies and build
+        run: |
           brew install ninja
           brew install coreutils
           brew install s3cmd
           sudo xcode-select --switch /Applications/Xcode_13.1.app
+          
+          # Create build directory
           mkdir jcef_build && cd jcef_build
+          
+          # Configure with CMake
           cmake -G "Ninja" -DPROJECT_ARCH=${{ matrix.platform }} -DCMAKE_BUILD_TYPE=Release ..
+          
+          # Build with Ninja
           ninja -j4
+          
+          # Package the build
           mv native/Release macos_${{ matrix.platform }}
           tar -czf macos_${{ matrix.platform }}.tar.gz macos_${{ matrix.platform }}
-          sha256sum macos_${{ matrix.platform }}.tar.gz > macos_${{ matrix.platform }}.tar.gz.sha256
+          shasum -a 256 macos_${{ matrix.platform }}.tar.gz > macos_${{ matrix.platform }}.tar.gz.sha256
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.platform }}
+          path: |
+            jcef_build/macos_${{ matrix.platform }}.tar.gz
+            jcef_build/macos_${{ matrix.platform }}.tar.gz.sha256
+      
       - name: Copy s3cfg
+        if: ${{ secrets.S3_CFG }}
         run: echo "${{ secrets.S3_CFG }}" > ~/.s3cfg
-      - name: Upload java-cef build
+      
+      - name: Upload to S3
+        if: ${{ secrets.S3_CFG && github.ref == 'refs/heads/master' }}
         run: |
           s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_${{ matrix.platform }}.tar.gz s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_${{ matrix.platform }}.tar.gz
           s3cmd put -P /Users/runner/work/java-cef/java-cef/jcef_build/macos_${{ matrix.platform }}.tar.gz.sha256 s3://mcef-us-1/java-cef-builds/${{ github.sha }}/macos_${{ matrix.platform }}.tar.gz.sha256
+
+  create-release:
+    needs: [java-cef-linux, java-cef-windows, java-cef-macos]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: build-${{ github.sha }}
+          name: Java-CEF Build ${{ github.sha }}
+          body: |
+            Automated build of java-cef
+            
+            **Commit:** ${{ github.sha }}
+            **Date:** ${{ github.event.head_commit.timestamp }}
+            
+            ### Available platforms:
+            - Linux: amd64, arm64
+            - Windows: amd64, arm64  
+            - macOS: amd64, arm64
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.sha256
+          prerelease: true
